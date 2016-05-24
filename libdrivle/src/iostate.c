@@ -1,5 +1,7 @@
 #include <iostate.h>
 
+#include <stdlib.h>
+
 static bool is_whitespace(char ch)
 {
     return ch == '\t' || ch == '\r' || ch == '\n' || ch == ' ';
@@ -7,7 +9,7 @@ static bool is_whitespace(char ch)
 
 bool eat_whitespace(struct read_state *state)
 {
-    while (state->read != state->end && is_whitespace(state->read)) {
+    while (state->read != state->end && is_whitespace(*state->read)) {
         state->read++;
     }
     return state->read != state->end;
@@ -45,11 +47,11 @@ void read_state_put_back(struct read_state *read)
 void write_state_init(struct write_state *write)
 {
     write->buf = malloc(20);
-    write->write = write->buff;
+    write->write = write->buf;
     write->end = write->buf + 20;
 }
 
-void write_state_expand(struct write_state *write)
+void write_state_extend(struct write_state *write)
 {
     int len;
     int offs;
@@ -57,15 +59,15 @@ void write_state_expand(struct write_state *write)
     offs = write->write - write->buf;
     write->buf = realloc(write->buf, len*2);
     write->write = write->buf + offs;
-    write->end = write->buf + len;
+    write->end = write->buf + len*2;
 }
 
 void write_state_free(struct write_state *write)
 {
     free(write->buf);
-    write->buf = NULL;
-    write->write = NULL;
-    write->end = NULL;
+    write->buf = 0;
+    write->write = 0;
+    write->end = 0;
 }
 
 int write_state_left(struct write_state *write)

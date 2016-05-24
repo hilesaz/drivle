@@ -1,7 +1,9 @@
 #include <json-builder.h>
+#include <json.h>
 
 #include <stdbool.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #define ARR_LEN(x) (sizeof(x)/sizeof(*x))
@@ -10,10 +12,12 @@ typedef bool (*test_type)(void);
 
 bool test_drive_json(void);
 bool test_nested_objects(void);
+bool test_parse_json(void);
 
 test_type tests[] = {
     test_drive_json,
-    test_nested_objects
+    test_nested_objects,
+    test_parse_json
 };
 
 int main(int argc, char **argv)
@@ -65,4 +69,74 @@ bool test_nested_objects(void)
     if (!success)
         printf("json buffer is: %s\n", json.buffer);
     return success;
+}
+
+bool test_parse_json(void)
+{
+    struct json_val *root;
+    int start, end;
+    char *buf;
+    bool success;
+
+    FILE *file;
+    file = fopen("drive.res", "r");
+    if (!file) {
+        printf("Couldn't find drive.res to do test\n");
+        return false;
+    }
+    start = ftell(file);
+    fseek(file, 0, SEEK_END);
+    end = ftell(file);
+    rewind(file);
+
+    buf = malloc(end - start);
+    fread(buf, 1, end-start, file);
+
+    
+
+    root = json_parse(buf, buf+end);
+    free(buf);
+
+    if (!root) {
+        printf("No root value returned\n");
+        goto fail;
+    }
+    if (root->type != JSON_OBJECT) {
+        printf("Root object parsed with wrong type\n");
+        goto fail;
+    }
+    if (root->length != 2) {
+        printf("Root object has wrong number of members\n");
+        goto fail;
+    }
+    if (!root->object[0].key) {
+        printf("First object in root's key is NULL\n");
+        goto fail;
+    }
+    if (root->object[0].key->type != JSON_STRING) {
+        printf("First object in root's key is not a string\n");
+        goto fail;
+    }
+    if (strcmp(root->object[0].key->string, "kind")) {
+        printf("First object in root's key has wrong value\n");
+        goto fail;
+    }
+    if (!root->object[0].value) {
+        printf("First object in root's value is NULL\n");
+        goto fail;
+    }
+    if (root->object[0].value->type != JSON_STRING) {
+        printf("First object in root's value is not a string\n");
+        goto fail;
+    }
+    if (strcmp(root->object[0].value->string, "drive#fileList")) {
+        printf("First object in root's value has wrong value\n");
+        goto fail;
+    }
+
+    json_free_value(root);
+    return true;
+fail:
+    json_free_value(root);
+    return false;
 }

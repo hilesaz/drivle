@@ -12,8 +12,8 @@
 
 struct json_field
 {
-    json_val *key;//must be a string
-    json_val *value;
+    struct json_val *key;//must be a string
+    struct json_val *value;
 };
 
 struct json_val
@@ -31,5 +31,6 @@ struct json_val
 
 
 extern struct json_val *json_parse(char *start, char *end);
+extern void json_free_value(struct json_val *val);
 
 #endif /* JSON_H */

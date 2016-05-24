@@ -1,6 +1,8 @@
 #ifndef IOSTATE_H
 #define IOSTATE_H
 
+#include <stdbool.h>
+
 struct read_state
 {
     const char *buf;
@@ -25,7 +27,7 @@ extern bool read_state_get(struct read_state *read, char *ch);
 extern void read_state_put_back(struct read_state *read);
 
 extern void write_state_init(struct write_state *write);
-extern void write_state_expand(struct write_state *write);
+extern void write_state_extend(struct write_state *write);
 extern void write_state_free(struct write_state *write);
 extern int write_state_left(struct write_state *write);
 #endif /* IOSTATE_H */

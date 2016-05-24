@@ -1,7 +1,10 @@
 #include <json.h>
+
 #include <iostate.h>
 
 #include <stdbool.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 
 
@@ -15,106 +18,109 @@ struct json_val *json_parse_object(struct read_state *state);
 struct json_val *json_parse_array(struct read_state *state);
 struct json_val *json_parse_value(struct read_state *state);
 
+void json_free_value(struct json_val *val);
+void json_error_print(struct read_state *val, const char* error);
+
 struct json_val *json_parse_true(struct read_state *state)
 {
     struct json_val *value;
     value = malloc(sizeof(*value));
-    if (state->end - state->read < 3) {
-        printf("Unexpected end of file parsing true literal\n");
+    if (state->end - state->read < 4) {
+        json_error_print(state, "Unexpected end of file parsing true literal\n");
         goto fail;
     }
-    if (state->read[0] == 'r' && state->read[1] == 'u' && state->read[2] == 'e') {
-        state->read += 3;
-        value.type = JSON_TRUE;
+    if (state->read[0] == 'r' && state->read[1] == 'r' && state->read[2] == 'u' && state->read[3] == 'e') {
+        state->read += 4;
+        value->type = JSON_TRUE;
     } else {
-        printf("Unexpected character in true literal\n");
+        json_error_print(state, "Unexpected character in true literal\n");
         goto fail;
     }
     return value;
 
 fail:
     free(value);
-    return NULL;
+    return 0;
 }
 struct json_val *json_parse_false(struct read_state *state)
 {
     struct json_val *value;
     value = malloc(sizeof(*value));
-    if (state->end - state->read < 4) {
-        printf("Unexpected end of file parsing false literal\n");
+    if (state->end - state->read < 5) {
+        json_error_print(state, "Unexpected end of file parsing false literal\n");
         goto fail;
     }
-    if (state->read[0] == 'a' && state->read[1] == 'l' && state->read[2] == 's' && state->read[3] == 'e') {
-        state->read += 4;
-        value.type = JSON_FALSE;
+    if (state->read[0] == 'f' && state->read[1] == 'a' && state->read[2] == 'l' && state->read[3] == 's' && state->read[4] == 'e') {
+        state->read += 5;
+        value->type = JSON_FALSE;
     } else {
-        printf("Unexpected character in false literal\n");
+        json_error_print(state, "Unexpected character in false literal\n");
         goto fail;
     }
     return value;
 
 fail:
     free(value);
-    return NULL;
+    return 0;
 }
 struct json_val *json_parse_null(struct read_state *state)
 {
     struct json_val *value;
     value = malloc(sizeof(*value));
-    if (state->end - state->read < 3) {
-        printf("Unexpected end of file parsing null literal\n");
+    if (state->end - state->read < 4) {
+        json_error_print(state, "Unexpected end of file parsing null literal\n");
         goto fail;
     }
-    if (state->read[0] == 'u' && state->read[1] == 'l' && state->read[2] == 'l') {
-        state->read += 3;
-        value.type = JSON_NULL;
+    if (state->read[0] == 'n' && state->read[1] == 'u' && state->read[2] == 'l' && state->read[3] == 'l') {
+        state->read += 4;
+        value->type = JSON_NULL;
     } else {
-        printf("Unexpected character in null literal\n");
+        json_error_print(state, "Unexpected character in null literal\n");
         goto fail;
     }
     return value;
 
 fail:
     free(value);
-    return NULL;
+    return 0;
 }
 
 static struct json_field json_parse_object_field(struct read_state *state)
 {
-    struct json_field ret = {NULL,NULL};
+    struct json_field ret = {0,0};
     
     if (!eat_whitespace(state)) {
-        printf("Unexpected end of file parsing object field key\n");
+        json_error_print(state, "Unexpected end of file parsing object field key\n");
         goto fail;
     }
     ret.key = json_parse_value(state);
-    if (ret.key == NULL)
+    if (ret.key == 0)
         goto fail;
     if (ret.key->type != JSON_STRING) {
-        printf("Objected field key must be of type string\n");
+        json_error_print(state, "Objected field key must be of type string\n");
         goto fail;
     }
     ;
     if (!eat_whitespace(state)) {
-        printf("Unexpected end of file parsing object field\n");
+        json_error_print(state, "Unexpected end of file parsing object field\n");
         goto fail;
     }
     if (*state->read++ != ':') {
-        printf("Didn't find expected ':' reading object\n");
+        json_error_print(state, "Didn't find expected ':' reading object\n");
         goto fail;
     }
     if (!eat_whitespace(state)) {
-        printf("Unexpected end of file parsing object field value\n");
+        json_error_print(state, "Unexpected end of file parsing object field value\n");
         goto fail;
     }
     ret.value = json_parse_value(state);
-    if (ret.value == NULL)
+    if (ret.value == 0)
         goto fail;
     return ret;
         
 fail:
     free(ret.key);
-    ret.key == NULL;
+    ret.key == 0;
     return ret;
 }
 
@@ -126,11 +132,15 @@ struct json_val *json_parse_object(struct read_state *state)
     value = malloc(sizeof(*value));
     value->type = JSON_OBJECT;
     value->length = 0;
-    value->object = NULL;
+    value->object = 0;
 
+    if (*state->read++ != '{') {
+        json_error_print(state, "Internal error parsing object\n");
+        goto fail;
+    }
 
     if (!eat_whitespace(state)) {
-        printf("Unexpected end of file parsing object\n");
+        json_error_print(state, "Unexpected end of file parsing object\n");
         goto fail;
     }
     ch = *state->read++;
@@ -138,19 +148,24 @@ struct json_val *json_parse_object(struct read_state *state)
         //pass
     } else if(ch == '\"'){
         do {
+            read_state_put_back(state);
             value->length++;
             value->object = realloc(value->object, value->length * sizeof(*value->object));
             value->object[value->length-1] = json_parse_object_field(state);
-            if (value->object[value->length-1].key == NULL || value->object[value->length-1].value == NULL)
+            if (value->object[value->length-1].key == 0 || value->object[value->length-1].value == 0)
                 goto fail;
 
             if (!eat_whitespace(state)) {
-                printf("Unexpected end of file parsing object\n");
+                json_error_print(state, "Unexpected end of file parsing object\n");
                 goto fail;
             }
             ch = *state->read++;
             if (ch != '}' && ch != ',') {
-                printf("Unexpected %c reading object\n", ch);
+                json_error_print(state, "Unexpected character reading object\n");
+                goto fail;
+            }
+            if (!eat_whitespace(state)) {
+                json_error_print(state, "Unexpected end of file parsing object\n");
                 goto fail;
             }
         } while(ch == ',');
@@ -159,7 +174,7 @@ struct json_val *json_parse_object(struct read_state *state)
 
     fail:
     json_free_value(value);
-    return NULL;
+    return 0;
 }
 struct json_val *json_parse_array(struct read_state *state)
 {
@@ -169,35 +184,45 @@ struct json_val *json_parse_array(struct read_state *state)
     value = malloc(sizeof(*value));
     value->type = JSON_ARRAY;
     value->length = 0;
-    value->array = NULL;
+    value->array = 0;
+
+    if (*state->read++ != '[') {
+        json_error_print(state, "Internal error parsing array\n");
+        goto fail;
+    }
 
     if(!eat_whitespace(state)) {
-        printf("Unexpected end of file parsing array\n");
+        json_error_print(state, "Unexpected end of file parsing array\n");
         goto fail;
     }
     ch = *state->read++;
     if (ch == ']') {
         //pass
     } else {
+            read_state_put_back(state);
         do {
             value->length++;
             value->array = realloc(value->object, value->length * sizeof(*value->object));
-            value->array[value->length-1] = json_parse_value(state, ch);
-            if (value->array[value->length-1] == NULL)
+            value->array[value->length-1] = json_parse_value(state);
+            if (value->array[value->length-1] == 0)
                 goto fail;
 
             if (!eat_whitespace(state)) {
-                printf("Unexpected end of file parsing array\n");
+                json_error_print(state, "Unexpected end of file parsing array\n");
                 goto fail;
             }
             ch = *state->read++;
+            if (!eat_whitespace(state)) {
+                json_error_print(state, "Unexpected end of file parsing array\n");
+                goto fail;
+            }
         } while (ch == ',');
     }
     return value;
 
 fail:
     json_free_value(value);
-    return NULL;
+    return 0;
 }
 
 
@@ -216,6 +241,11 @@ static char unencode_hex(char ch)
     return 0;
 }
 
+static bool ishex(char ch)
+{
+    return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9');
+}
+
 static char unencode_hex_codepoint(char c0, char c1, char c2, char c3)
 {
     if (!ishex(c0) || !ishex(c1) || !ishex(c2) || !ishex(c3))
@@ -229,21 +259,25 @@ static char unencode_hex_codepoint(char c0, char c1, char c2, char c3)
 static char json_parse_unescape_char(struct read_state *state)
 {
     char ch, ret;
-    if (read_state_left(state) >= 1) {
-        printf("Unexpected end of file in escaped sequence\n");
+    if (*state->read++ != '\\') {
+        json_error_print(state, "Internal error parsing escape sequence\n");
+    }
+
+    if (read_state_left(state) < 1) {
+        json_error_print(state, "Unexpected end of file in escaped sequence\n");
         return 0;
     }
     ch = *state->read++;
     if (ch == 'u') {
-        if (read_state_left(state) >= 4) {
-            printf("Unexpected end of file in unicode escape sequence\n");
+        if (read_state_left(state) < 4) {
+            json_error_print(state, "Unexpected end of file in unicode escape sequence\n");
             return 0;
         }
         ret = unencode_hex_codepoint(state->read[0],state->read[1],state->read[2],state->read[3]);
         state->read += 4;
     } else {
-        if (read_state_left(state) >= 1) {
-            printf("Unexpected end of file in character escape sequence\n");
+        if (read_state_left(state) < 1) {
+            json_error_print(state, "Unexpected end of file in character escape sequence\n");
             return 0;
         }
         switch(ch) {
@@ -272,7 +306,7 @@ static char json_parse_unescape_char(struct read_state *state)
                 ret = '\t';
                 break;
             default:
-                printf("invalid escape sequence found\n");
+                json_error_print(state, "invalid escape sequence found\n");
                 return 0;
         }
     }
@@ -286,37 +320,43 @@ static bool is_invalid_string_char(char ch)
 
 static char *json_parse_chars(struct read_state *state)
 {
-    struct write_struct write;
+    struct write_state write;
     char ch, decoded_char;
+
+    if (*state->read++ != '\"') {
+        json_error_print(state, "Internal error parsing string value\n");
+        goto fail;
+    }
     
-    write_struct_init(&write);
+    write_state_init(&write);
 
     while (true) {
-        if (read_state_left(state) >= 1) {
-            printf("Unexpected end of file parsing string\n");
+        if (read_state_left(state) < 1) {
+            json_error_print(state, "Unexpected end of file parsing string\n");
             goto fail;
         }
         ch = *state->read++;
         if (ch == '\\') {
+            read_state_put_back(state);
             decoded_char = json_parse_unescape_char(state);
             //TODO: this has failure states
         } else if (ch == '\"') {
             break;
         } else if (is_invalid_string_char(ch)) {
-            printf("Invalid unescaped character in string: %c\n", ch);
+            json_error_print(state, "Invalid unescaped character in string\n");
             goto fail;
         } else {
             decoded_char = ch;
         }
-        if (write_struct_left(&write) < 1)
-            write_struct_extend(&write);
+        if (write_state_left(&write) < 1)
+            write_state_extend(&write);
         *write.write++ = decoded_char;
     }
-    return write->buf;
+    return write.buf;
 
 fail:
-    write_struct_free(&write);
-    return NULL;
+    write_state_free(&write);
+    return 0;
 }
 
 struct json_val *json_parse_string(struct read_state *state)
@@ -327,67 +367,84 @@ struct json_val *json_parse_string(struct read_state *state)
     value->type = JSON_STRING;
 
     value->string = json_parse_chars(state);
-    if (value->string == NULL)
+    if (value->string == 0)
         goto fail;
     return value;
 
 fail:
     free(value);
-    return NULL;
+    return 0;
 }
 
-static double get_value_of(int pre_decimal, int post_decimal, int exponent, bool negative, bool negative_exp)
+static long int ten_to(int power)
 {
-    
+    long int ret = 1;
+    if (power < 0)
+        return 0;
+    while (power--)
+        ret *= 10;
+    return ret;
 }
 
-struct json_val *json_parse_number(struct read_state *state, char ch)
+static struct json_val *json_create_number(double value)
 {
-    bool negative = false, negative_exp = false;
-    int pre_decimal = 0, post_decimal = 0, exponent = 0;
+    struct json_val *ret;
+    ret = malloc(sizeof(*ret));
+
+    ret->type = JSON_NUMBER;
+    ret->number = value;
+}
+
+struct json_val *json_parse_number(struct read_state *state)
+{
+    char dbl_buf[30];
+    char *write = dbl_buf;
+    char ch = *state->read++;
+
     if (ch == '-') {
-        negative = true;
+        *write++ = '-';
     }
 
-    if (!read_state_get(state, ch))
+    if (!read_state_get(state, &ch))
         goto fail;
     if (ch == '0') {
         //pass
     } else if (ch >= '1' && ch <= '9') {
-        pre_decimal = ch - '0';
+        *write++ = ch;
 
         while (true) {
-            if (!read_state_get(state, ch))
+            if (!read_state_get(state, &ch))
                 goto calc_value;
             if (ch < '0' || ch > '9') {
                 read_state_put_back(state);
                 break;
             }
-            pre_decimal = 10*pre_decimal + ch - '0';
+            *write++ = ch;
         }
     } else {
-        printf("Invalid character found parsing number\n");
+        json_error_print(state, "Invalid character found parsing number\n");
         goto fail;
     }
     
-    if (read_state_get(state, ch)) {
+    if (read_state_get(state, &ch)) {
         if (ch == '.') {
-            if (!read_state_get(state, ch)) {
-                printf("Expected digit after decimal\n");
+            *write++ = '.';
+            if (!read_state_get(state, &ch)) {
+                json_error_print(state, "Expected digit after decimal\n");
                 goto fail;
             }
             if(ch >= '0' && ch <= '9') {
-                post_decimal = ch - '0';
+                *write++ = ch;
             } else {
-                printf("Invalid character found after decimal\n");
+                json_error_print(state, "Invalid character found after decimal\n");
                 goto fail;
             }
             while (true) {
-                if (!read_state_get(state, ch)) {
+                if (!read_state_get(state, &ch)) {
                     goto calc_value;
                 }
                 if(ch >= '0' && ch <= '9') {
-                    post_decimal = post_decimal*10 + ch - '0';
+                    *write++ = ch;
                 } else {
                     read_state_put_back(state);
                     break;
@@ -398,30 +455,29 @@ struct json_val *json_parse_number(struct read_state *state, char ch)
             read_state_put_back(state);
         }
     }
-    if (read_state_get(state, ch)) {
+    if (read_state_get(state, &ch)) {
         if (ch == 'e' || ch == 'E') {
-            if (read_state_get(state, ch)) {
-                if (ch == '+') {
-                    //pass
-                } else if (ch == '-') {
-                    negative_exp = true;
+            *write++ = 'e';
+            if (read_state_get(state, &ch)) {
+                if (ch == '+' || ch == '-') {
+                    *write++ = ch;
                 } else {
                     read_state_put_back(state);
                 }
             }
-            if (!read_state_get(state, ch)) {
-                printf("Expected digit in exponent\n");
+            if (!read_state_get(state, &ch)) {
+                json_error_print(state, "Expected digit in exponent\n");
                 goto fail;
             } else if (ch < '0' || ch > '9') {
-                printf("Invalid character in exponent\n");
+                json_error_print(state, "Invalid character in exponent\n");
             } else {
-                exponent = ch - '0';
+                *write++ = ch;
                 while (true) {
-                    if (!read_state_get(state, ch)) {
+                    if (!read_state_get(state, &ch)) {
                         goto calc_value;
                     }
                     if(ch >= '0' && ch <= '9') {
-                        exponent = exponent*10 + ch - '0';
+                        *write++ = ch;
                     } else {
                         read_state_put_back(state);
                         break;
@@ -434,16 +490,25 @@ struct json_val *json_parse_number(struct read_state *state, char ch)
         }
     }
 calc_value:
-    return get_value_of(pre_decimal,post_decimal,exponent,negative,negative_exp);
+    *write++ = '\0';
+    return json_create_number(strtod(dbl_buf, 0));
 
 fail:
     return 0;
 
 }
 
-struct json_val *json_parse_value(struct read_state *state, char ch)
+struct json_val *json_parse_value(struct read_state *state)
 {
     struct json_val *value;
+    char ch;
+    
+    if (read_state_left(state) < 1) {
+        json_error_print(state, "Unexpected end of file parsing generic value\n");
+        return 0;
+    }
+    ch = *state->read;
+    
     switch (ch) {
         case 't':
             value = json_parse_true(state);
@@ -464,7 +529,7 @@ struct json_val *json_parse_value(struct read_state *state, char ch)
             value = json_parse_array(state);
             break;
         default:
-            value = json_parse_number(state, ch);
+            value = json_parse_number(state);
     }
     return value;
 }
@@ -476,8 +541,8 @@ struct json_val *json_parse_base(struct read_state *state)
             state->read += 2;//Eat any BOMs
     }
     if (!eat_whitespace(state))
-        return NULL;
-    return json_parse_value(state, *state->read++);
+        return 0;
+    return json_parse_value(state);
 }
 
 struct json_val *json_parse(char *start, char *end)
@@ -486,4 +551,85 @@ struct json_val *json_parse(char *start, char *end)
     read_state_init(&state, start, end);
 
     struct json_val *root = json_parse_base(&state);
+}
+
+void json_free_value(struct json_val *value)
+{
+    int i;
+    if (!value)
+        return;
+    switch (value->type) {
+        case JSON_OBJECT:
+            for (i = 0; i < value->length; i++) {
+                json_free_value(value->object[i].key);
+                json_free_value(value->object[i].value);
+            }
+                free(value->object);
+                break;
+            case JSON_ARRAY:
+                for (i = 0; i < value->length; i++) {
+                    json_free_value(value->array[i]);
+                }
+                free(value->array);
+                break;
+            case JSON_STRING:
+                free(value->string);
+                break;
+            case JSON_NUMBER: case JSON_TRUE: case JSON_FALSE:
+            case JSON_NULL: default:
+                break;
+        }
+        free(value);
+    }
+
+    void json_error_location(struct read_state *state, int offset, int *row, int *col)
+    {
+        int i;
+        int _row = 1, _col = 1;
+        bool newline, tab;
+        
+        for (i = 0; i < offset; i++) {
+            newline = false;
+            tab = false;
+            switch (state->buf[i]) {
+                case '\r':
+                    if (state->buf[i+1] == '\n') {
+                        i++;
+                        newline = true;
+                    }
+                    break;
+                case '\n':
+                    newline = true;
+                    break;
+                case '\t':
+                    tab = true;
+                    break;
+                default:
+                    break;
+            }
+            if (newline) {
+                _col = 1;
+            _row++;
+        } else if (tab) {
+            _col = ((_col-1)&0xfc) + 5;
+        } else {
+            _col++;
+        }
+    }
+    if (col)
+        *col = _col;
+    if (row)
+        *row = _row;
+}
+
+void json_error_location_here(struct read_state *state, int *row, int *col)
+{
+    json_error_location(state, state->read - state->buf, row, col);
+}
+
+void json_error_print(struct read_state *state, const char* error)
+{
+    int row, col;
+    json_error_location_here(state, &row, &col);
+    printf("ERR:%d:%d - %s\n", row, col, error);
 }
