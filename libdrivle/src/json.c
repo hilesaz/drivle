@@ -29,7 +29,7 @@ struct json_val *json_parse_true(struct read_state *state)
         json_error_print(state, "Unexpected end of file parsing true literal\n");
         goto fail;
     }
-    if (state->read[0] == 'r' && state->read[1] == 'r' && state->read[2] == 'u' && state->read[3] == 'e') {
+    if (state->read[0] == 't' && state->read[1] == 'r' && state->read[2] == 'u' && state->read[3] == 'e') {
         state->read += 4;
         value->type = JSON_TRUE;
     } else {
@@ -164,7 +164,7 @@ struct json_val *json_parse_object(struct read_state *state)
                 json_error_print(state, "Unexpected character reading object\n");
                 goto fail;
             }
-            if (!eat_whitespace(state)) {
+            if (!eat_whitespace(state) && ch != '}') {
                 json_error_print(state, "Unexpected end of file parsing object\n");
                 goto fail;
             }
@@ -212,7 +212,11 @@ struct json_val *json_parse_array(struct read_state *state)
                 goto fail;
             }
             ch = *state->read++;
-            if (!eat_whitespace(state)) {
+            if (ch != ']' && ch != ',') {
+                json_error_print(state, "Unexpected character found parsing array\n");
+                goto fail;
+            }
+            if (!eat_whitespace(state) && ch != ']') {
                 json_error_print(state, "Unexpected end of file parsing array\n");
                 goto fail;
             }
@@ -352,6 +356,10 @@ static char *json_parse_chars(struct read_state *state)
             write_state_extend(&write);
         *write.write++ = decoded_char;
     }
+
+    if (write_state_left(&write) < 1)
+        write_state_extend(&write);
+    *write.write++ = '\0';
     return write.buf;
 
 fail:
@@ -393,6 +401,7 @@ static struct json_val *json_create_number(double value)
 
     ret->type = JSON_NUMBER;
     ret->number = value;
+    return ret;
 }
 
 struct json_val *json_parse_number(struct read_state *state)

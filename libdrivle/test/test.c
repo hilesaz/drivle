@@ -13,11 +13,13 @@ typedef bool (*test_type)(void);
 bool test_drive_json(void);
 bool test_nested_objects(void);
 bool test_parse_json(void);
+bool test_parse_naked(void);
 
 test_type tests[] = {
     test_drive_json,
     test_nested_objects,
-    test_parse_json
+    test_parse_json,
+    test_parse_naked
 };
 
 int main(int argc, char **argv)
@@ -47,9 +49,10 @@ bool test_drive_json(void)
     json_builder_end_array(&json);
     json_builder_end_object(&json);
 
-    success = !strcmp(json.buffer, "{\"name\":\"file.txt\",\"parents\":[\"drive\",\"pictures\"]}");
+    success = !strcmp(json_builder_get(&json), "{\"name\":\"file.txt\",\"parents\":[\"drive\",\"pictures\"]}");
     if (!success)
         printf("json buffer is: %s\n", json.buffer);
+    free(json.buffer);
     return success;
 }
 
@@ -68,6 +71,7 @@ bool test_nested_objects(void)
     success = !strcmp(json_builder_get(&json), "{{{{{{{{{{{{{{{{{{{{}}}}}}}}}}}}}}}}}}}}");
     if (!success)
         printf("json buffer is: %s\n", json.buffer);
+    free(json.buffer);
     return success;
 }
 
@@ -92,7 +96,8 @@ bool test_parse_json(void)
     buf = malloc(end - start);
     fread(buf, 1, end-start, file);
 
-    
+    fclose(file);
+
 
     root = json_parse(buf, buf+end);
     free(buf);
@@ -118,7 +123,7 @@ bool test_parse_json(void)
         goto fail;
     }
     if (strcmp(root->object[0].key->string, "kind")) {
-        printf("First object in root's key has wrong value\n");
+        printf("First object in root's key has wrong value: %s\n", root->object[0].key->string);
         goto fail;
     }
     if (!root->object[0].value) {
@@ -130,7 +135,7 @@ bool test_parse_json(void)
         goto fail;
     }
     if (strcmp(root->object[0].value->string, "drive#fileList")) {
-        printf("First object in root's value has wrong value\n");
+        printf("First object in root's value has wrong value: %s\n", root->object[0].key->string);
         goto fail;
     }
 
@@ -138,5 +143,76 @@ bool test_parse_json(void)
     return true;
 fail:
     json_free_value(root);
+    return false;
+}
+
+bool test_parse_naked(void)
+{
+    char *buf = "null";
+    struct json_val *val = json_parse(buf, buf + sizeof("null")-1);
+    if (!val || val->type != JSON_NULL) {
+        printf("Failed to parse naked null\n");
+        goto fail;
+    }
+    json_free_value(val);
+    buf = "true";
+    val = json_parse(buf, buf + sizeof("true")-1);
+    if (!val || val->type != JSON_TRUE) {
+        printf("Failed to parse naked true\n");
+        goto fail;
+    }
+    json_free_value(val);
+    buf = "false";
+    val = json_parse(buf, buf + sizeof("false")-1);
+    if (!val || val->type != JSON_FALSE) {
+        printf("Failed to parse naked false\n");
+        goto fail;
+    }
+    json_free_value(val);
+    buf = "{}";
+    val = json_parse(buf, buf + sizeof("{}")-1);
+    if (!val || val->type != JSON_OBJECT) {
+        printf("Failed to parse naked object\n");
+        goto fail;
+    }
+    json_free_value(val);
+    buf = "[]";
+    val = json_parse(buf, buf + sizeof("[]")-1);
+    if (!val || val->type != JSON_ARRAY) {
+        printf("Failed to parse naked array\n");
+        goto fail;
+    }
+    json_free_value(val);
+    buf = "-123.45e10";
+    val = json_parse(buf, buf + sizeof("-123.45e10")-1);
+    if (!val || val->type != JSON_NUMBER) {
+        printf("Failed to parse naked number ending in exponent\n");
+        goto fail;
+    }
+    json_free_value(val);
+    buf = "-123.45";
+    val = json_parse(buf, buf + sizeof("-123.45")-1);
+    if (!val || val->type != JSON_NUMBER) {
+        printf("Failed to parse naked number ending in decimal\n");
+        goto fail;
+    }
+    json_free_value(val);
+    buf = "-123";
+    val = json_parse(buf, buf + sizeof("-123")-1);
+    if (!val || val->type != JSON_NUMBER) {
+        printf("Failed to parse naked number ending in whole number\n");
+        goto fail;
+    }
+    json_free_value(val);
+    buf = "\"\"";
+    val = json_parse(buf, buf + sizeof("\"\"")-1);
+    if (!val || val->type != JSON_STRING) {
+        printf("Failed to parse naked string\n");
+        goto fail;
+    }
+    json_free_value(val);
+    return true;
+
+fail:
     return false;
 }

@@ -105,7 +105,7 @@ void json_builder_init(struct json_builder *json)
 char *json_builder_get(struct json_builder *json)
 {
     ensure_room_for(json, 1);
-    *(json->write+1) = '\0';
+    *json->write++ = '\0';
     return json->buffer;
 }
 
@@ -128,6 +128,7 @@ void json_builder_end_object(struct json_builder *json)
     struct json_obj_stack *old_top;
     if (!json->stack || json->stack->type != TYPE_OBJECT)
         return;
+    ensure_room_for(json, 1);
     *json->write++ = '}';
     
     old_top = json->stack;
